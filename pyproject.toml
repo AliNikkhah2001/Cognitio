@@ -1,18 +1,17 @@
 [project]
-name = "lythic"
+name = "cognitio"
 version = "0.1.0"
-description = "Lythic — Obsidian 1:1 clone in Python (PySide6 LGPL, vault + graph + git sync)"
+description = "Cognitio — local-first knowledge engine for IMPERIUM"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = { text = "MIT" }
 authors = [{ name = "Ali Nikkhah" }]
-keywords = ["obsidian", "vault", "knowledge-graph", "pyside6", "markdown"]
+keywords = ["knowledge-base", "markdown", "knowledge-graph", "local-first"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "License :: OSI Approved :: MIT License",
-  "Environment :: X11 Applications :: Qt",
 ]
 dependencies = [
   "PySide6>=6.7,<7",
@@ -51,7 +50,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lythic"]
+packages = ["cognitio", "lythic"]
 
 [tool.ruff]
 target-version = "py311"
@@ -94,7 +93,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["lythic"]
+source = ["cognitio", "lythic"]
 branch = true
 omit = [
   "lythic/presentation/*",

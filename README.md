@@ -8,14 +8,14 @@ This repository is the legacy Lythic codebase being converted into an independen
 
 ## Status
 
-Planning and containment phase. The existing `lythic` Python namespace remains temporarily available so the migration can be incremental. Do not treat the current PySide6 presentation layer or Cytoscape prototype as the target UI.
+The minimum Qt-free knowledge service is integrated into IMPERIUM. The existing `lythic` Python namespace remains temporarily available so the migration can be incremental. Do not treat the historical PySide6 presentation layer or Cytoscape prototype as the target UI.
 
 | Area | Current state | Target state |
 |---|---|---|
 | Canonical storage | Markdown vault | Markdown vault |
 | Search/index | SQLite + FTS5 | Rebuildable SQLite + FTS5 index |
 | Knowledge graph | Wikilinks, backlinks, local BFS, Louvain | Typed nodes/edges, ghost nodes, local/global/semantic views |
-| Editor | PySide6 `QTextEdit` prototype | Atomic-derived CodeMirror 6 React editor inside IMPERIUM |
+| Editor | IMPERIUM Quick Notes Markdown editor; vault view is read-only | Atomic-derived CodeMirror 6 React vault editor inside IMPERIUM |
 | Graph UI | Cytoscape HTML prototype | Nodum-derived Cosmos.gl React component inside IMPERIUM |
 | Desktop shell | Standalone PySide6 | IMPERIUM PyQt6 + QWebEngine |
 | Package name | `lythic` | `cognitio`, with temporary compatibility imports |
@@ -29,6 +29,15 @@ Planning and containment phase. The existing `lythic` Python namespace remains t
 5. Nodum and Atomic code is adapted behind Cognitio-owned interfaces; upstream license notices remain intact.
 6. One note has one authoritative writer. Local-vault and remote-Nodum modes are never silently dual-written.
 7. Every milestone requires tests, measurements, documentation, and an explicit exit gate.
+
+## IMPERIUM workspace integration
+
+IMPERIUM exposes Cognitio as one unified **Knowledge Workspace** with two explicit modes:
+
+- **Vault** indexes, searches, reads, and graphs durable filesystem Markdown through Cognitio. Vault files remain read-only at this milestone.
+- **Quick Notes** embeds IMPERIUM's existing Markdown editor, live preview, exports, folders, and goal categories. Quick Notes remain stored in IMPERIUM's synchronized SQLite `notes` table; they are not silently copied into or dual-written with the vault.
+
+The former standalone Notes navigation item is removed. Existing saved `notes` routes migrate to `cognitio` automatically, so upgrades do not open an empty module. The host owns this composition; Cognitio does not import IMPERIUM UI or either Qt binding.
 
 See:
 
@@ -85,18 +94,18 @@ After the namespace migration, `mypy lythic` becomes `mypy src/cognitio`; the co
 
 ## Immediate checklist
 
-- [ ] Merge the Cognitio planning PR in this repository.
-- [ ] Merge the IMPERIUM submodule scaffold PR.
-- [ ] Rename the GitHub repository from `Lythic` to `Cognitio` when redirects and permissions are confirmed.
-- [ ] Update `.gitmodules` to the renamed repository URL.
-- [ ] Split PySide6 presentation dependencies from the core install.
+- [x] Merge the Cognitio planning and minimum-service work.
+- [x] Merge the IMPERIUM submodule integration.
+- [x] Rename the GitHub repository to `Cognitio` and update `.gitmodules`.
+- [x] Split the Qt-free knowledge service from the historical PySide6 shell.
 - [ ] Establish current test, coverage, lint, type, startup, and graph-performance baselines.
-- [ ] Fix path-stable note IDs and preserve unresolved links as ghost nodes.
-- [ ] Create the versioned `KnowledgeService` API.
+- [x] Fix path-stable note IDs and preserve unresolved links as ghost nodes.
+- [x] Create the minimum JSON-safe `KnowledgeService` API.
 - [ ] Add a Vite + React + TypeScript build boundary for embedded web UI.
 - [ ] Adapt Atomic Editor behind `EditorAdapter`.
 - [ ] Adapt Nodum graph rendering behind `KnowledgeGraphProps`.
-- [ ] Integrate the Knowledge tab and complete release gates.
+- [x] Integrate Vault and editable Quick Notes in one IMPERIUM knowledge tab.
+- [ ] Complete the remaining release gates.
 
 ## Non-goals for the first release
 

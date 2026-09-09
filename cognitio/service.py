@@ -7,8 +7,12 @@ replaced underneath it.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
+import tempfile
 import threading
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +21,21 @@ _WIKILINK_RE = re.compile(r"!?\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 _TAG_RE = re.compile(r"(?:^|\s)#([\w/-]+)")
 _HEADING_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _IGNORED_PARTS = frozenset({".git", ".obsidian", ".cognitio", ".lythic", "__pycache__"})
+_WORD_RE = re.compile(r"[\w-]{3,}", re.UNICODE)
+_STOP_WORDS = frozenset(
+    {
+        "and",
+        "are",
+        "for",
+        "from",
+        "into",
+        "that",
+        "the",
+        "this",
+        "with",
+        "your",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,11 +56,12 @@ class _IndexedNote:
             "path": self.relative_path,
             "modifiedAt": self.modified_at,
             "tags": list(self.tags),
+            "revision": _revision(self.content),
         }
 
 
 class KnowledgeService:
-    """Read-only Markdown vault facade with stable JSON-safe responses."""
+    """Markdown vault facade with atomic writes and JSON-safe responses."""
 
     schema_version = 1
 
@@ -96,7 +116,7 @@ class KnowledgeService:
         return {
             "schemaVersion": self.schema_version,
             "provider": "local-markdown",
-            "mode": "read-only",
+            "mode": "read-write",
             "vaultPath": str(self._root),
             "noteCount": note_count,
         }
@@ -126,6 +146,88 @@ class KnowledgeService:
         result["content"] = note.content
         result["links"] = list(note.links)
         return result
+
+    def save_note(
+        self, note_id: str, content: str, *, expected_revision: str | None = None
+    ) -> dict[str, Any]:
+        """Atomically save a note, rejecting stale editor revisions."""
+        if not isinstance(content, str):
+            raise ValueError("content must be text")
+        with self._lock:
+            note = self._notes.get(note_id)
+        if note is None:
+            raise KeyError("note was not found in this vault")
+        if expected_revision and expected_revision != _revision(note.content):
+            raise ValueError("note changed on disk; reload it before saving")
+        _atomic_write(note.absolute_path, content)
+        self.refresh()
+        return self.read_note(note_id)
+
+    def create_note(
+        self, title: str, *, parent_path: str = "", content: str | None = None
+    ) -> dict[str, Any]:
+        """Create a uniquely named Markdown note inside the vault."""
+        clean_title = re.sub(r"\s+", " ", re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", title)).strip(" .")
+        if not clean_title:
+            clean_title = "Untitled Note"
+        parent = (self._root / parent_path.strip()).resolve()
+        if parent != self._root and self._root not in parent.parents:
+            raise ValueError("parent path must stay inside the vault")
+        parent.mkdir(parents=True, exist_ok=True)
+        candidate = parent / f"{clean_title}.md"
+        suffix = 2
+        while candidate.exists():
+            candidate = parent / f"{clean_title} {suffix}.md"
+            suffix += 1
+        initial = content if content is not None else f"# {clean_title}\n"
+        _atomic_write(candidate, initial, create_only=True)
+        self.refresh()
+        note_id = candidate.relative_to(self._root).with_suffix("").as_posix()
+        return self.read_note(note_id)
+
+    def suggest_connections(self, note_id: str, limit: int = 6) -> dict[str, Any]:
+        """Suggest transparent local relationships using tags and weighted keywords."""
+        if limit < 1 or limit > 20:
+            raise ValueError("limit must be between 1 and 20")
+        with self._lock:
+            source = self._notes.get(note_id)
+            notes = tuple(self._notes.values())
+        if source is None:
+            raise KeyError("note was not found in this vault")
+        source_words = _keywords(source)
+        source_tags = set(source.tags)
+        ranked: list[tuple[float, _IndexedNote, set[str], set[str]]] = []
+        for candidate in notes:
+            if candidate.note_id == note_id:
+                continue
+            shared_words = source_words & _keywords(candidate)
+            shared_tags = source_tags & set(candidate.tags)
+            score = len(shared_words) + (3 * len(shared_tags))
+            if score:
+                ranked.append((float(score), candidate, shared_words, shared_tags))
+        ranked.sort(key=lambda item: (-item[0], item[1].note_id.casefold()))
+        selected = ranked[:limit]
+        tag_counts: Counter[str] = Counter(
+            tag
+            for _, candidate, _, _ in selected
+            for tag in candidate.tags
+            if tag not in source_tags
+        )
+        return {
+            "noteId": note_id,
+            "method": "local-keyword-v1",
+            "related": [
+                {
+                    "id": candidate.note_id,
+                    "title": candidate.title,
+                    "score": score,
+                    "sharedKeywords": sorted(shared_words)[:8],
+                    "sharedTags": sorted(shared_tags),
+                }
+                for score, candidate, shared_words, shared_tags in selected
+            ],
+            "suggestedTags": [tag for tag, _ in tag_counts.most_common(6)],
+        }
 
     def graph(self) -> dict[str, Any]:
         with self._lock:
@@ -158,6 +260,19 @@ class KnowledgeService:
                 degree[note.note_id] = degree.get(note.note_id, 0) + 1
                 degree[resolved] = degree.get(resolved, 0) + 1
 
+        tag_labels: dict[str, str] = {}
+        for note in notes:
+            for tag in note.tags:
+                tag_id = f"tag:{tag.casefold()}"
+                tag_labels.setdefault(tag_id, tag)
+                edge_key = (note.note_id, tag_id)
+                if edge_key in seen_edges:
+                    continue
+                seen_edges.add(edge_key)
+                edges.append({"source": note.note_id, "target": tag_id, "kind": "tag"})
+                degree[note.note_id] = degree.get(note.note_id, 0) + 1
+                degree[tag_id] = degree.get(tag_id, 0) + 1
+
         nodes = [
             {
                 "id": note.note_id,
@@ -167,6 +282,9 @@ class KnowledgeService:
                 "degree": degree[note.note_id],
                 "unresolved": False,
                 "tags": list(note.tags),
+                "community": note.tags[0].casefold()
+                if note.tags
+                else (Path(note.note_id).parts[0].casefold() if "/" in note.note_id else "notes"),
             }
             for note in notes
         ]
@@ -180,6 +298,18 @@ class KnowledgeService:
                 "tags": [],
             }
             for ghost_id, label in sorted(ghosts.items())
+        )
+        nodes.extend(
+            {
+                "id": tag_id,
+                "title": f"#{label}",
+                "kind": "tag",
+                "degree": degree[tag_id],
+                "unresolved": False,
+                "tags": [label],
+                "community": label.casefold(),
+            }
+            for tag_id, label in sorted(tag_labels.items())
         )
         return {
             "schemaVersion": self.schema_version,
@@ -203,3 +333,34 @@ def _normalize_target(target: str) -> str:
     while normalized.startswith("./"):
         normalized = normalized[2:]
     return normalized.casefold()
+
+
+def _revision(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _keywords(note: _IndexedNote) -> set[str]:
+    text = f"{note.title}\n{note.content}".casefold()
+    return {
+        word for word in _WORD_RE.findall(text) if word not in _STOP_WORDS and not word.isdigit()
+    }
+
+
+def _atomic_write(path: Path, content: str, *, create_only: bool = False) -> None:
+    """Write UTF-8 through a same-directory temporary file and atomic replace."""
+    if create_only and path.exists():
+        raise ValueError("note already exists")
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if create_only and path.exists():
+            raise ValueError("note already exists")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)

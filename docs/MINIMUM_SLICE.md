@@ -17,17 +17,21 @@ This slice proves that IMPERIUM can load Cognitio from its pinned submodule and 
 - [x] JSON-safe bootstrap payload
 - [x] Unit tests with no Qt dependency
 - [x] Minimal GitHub Actions gate
+- [x] Atomic Markdown create/save with optimistic revision checks
+- [x] Hashtags represented as graph hub nodes
+- [x] Explainable local keyword/tag connection suggestions
+- [x] Graph payload verified above 120 nodes without truncation
 
 ## Intentionally deferred
 
 - [ ] SQLite/FTS provider migration from legacy Lythic
 - [ ] Incremental filesystem watcher
-- [ ] Write, rename, trash and conflict handling
+- [ ] Rename, trash and full conflict-recovery UI
 - [ ] Atomic-derived editor
 - [ ] Nodum-derived WebGL graph
 - [ ] Semantic edges and analytics
 
-The minimum service rescans Markdown in memory and is read-only. This is deliberate: it proves integration without risking user-authored files. Its public response format is designed so the scanner can later be replaced by the derived SQLite index.
+The service rescans Markdown in memory. Create and save use path containment, same-directory temporary files, atomic replacement, and optimistic revisions; rename and trash remain deferred. Its public response format is designed so the scanner can later be replaced by the derived SQLite index.
 
 ## Verify
 

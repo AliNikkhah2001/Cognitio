@@ -15,8 +15,8 @@ The minimum Qt-free knowledge service is integrated into IMPERIUM. The existing 
 | Canonical storage | Markdown vault | Markdown vault |
 | Search/index | SQLite + FTS5 | Rebuildable SQLite + FTS5 index |
 | Knowledge graph | Wikilinks, backlinks, local BFS, Louvain | Typed nodes/edges, ghost nodes, local/global/semantic views |
-| Editor | IMPERIUM Quick Notes Markdown editor; vault view is read-only | Atomic-derived CodeMirror 6 React vault editor inside IMPERIUM |
-| Graph UI | Cytoscape HTML prototype | Nodum-derived Cosmos.gl React component inside IMPERIUM |
+| Editor | Integrated IMPERIUM Markdown node editor with atomic vault save | Atomic-derived CodeMirror 6 adapter inside IMPERIUM |
+| Graph UI | Clustered canvas with tag hubs, degree sizing, pan/zoom | Benchmarked Nodum/Cosmos or Sigma/Graphology WebGL adapter |
 | Desktop shell | Standalone PySide6 | IMPERIUM PyQt6 + QWebEngine |
 | Package name | `lythic` | `cognitio`, with temporary compatibility imports |
 
@@ -32,10 +32,9 @@ The minimum Qt-free knowledge service is integrated into IMPERIUM. The existing 
 
 ## IMPERIUM workspace integration
 
-IMPERIUM exposes Cognitio as one unified **Knowledge Workspace** with two explicit modes:
+IMPERIUM exposes Cognitio as one unified **Knowledge Workspace**. Its explorer, clustered graph, and Markdown node editor are simultaneous collapsible/resizable panes rather than separate graph/editor tabs. Vault Markdown can be safely created and edited with revision conflicts; existing synchronized IMPERIUM notes also appear as graph nodes and keep their SQLite authority.
 
-- **Vault** indexes, searches, reads, and graphs durable filesystem Markdown through Cognitio. Vault files remain read-only at this milestone.
-- **Quick Notes** embeds IMPERIUM's existing Markdown editor, live preview, exports, folders, and goal categories. Quick Notes remain stored in IMPERIUM's synchronized SQLite `notes` table; they are not silently copied into or dual-written with the vault.
+Hashtags are rendered as hub nodes, community colors are stable, highly connected nodes are larger and central within a cluster, and the graph payload has no 120-node preview cap. A local, explainable keyword/tag provider suggests related notes and hashtags; it never presents a suggested edge as an authored fact.
 
 The former standalone Notes navigation item is removed. Existing saved `notes` routes migrate to `cognitio` automatically, so upgrades do not open an empty module. The host owns this composition; Cognitio does not import IMPERIUM UI or either Qt binding.
 
@@ -102,9 +101,9 @@ After the namespace migration, `mypy lythic` becomes `mypy src/cognitio`; the co
 - [x] Fix path-stable note IDs and preserve unresolved links as ghost nodes.
 - [x] Create the minimum JSON-safe `KnowledgeService` API.
 - [ ] Add a Vite + React + TypeScript build boundary for embedded web UI.
-- [ ] Adapt Atomic Editor behind `EditorAdapter`.
-- [ ] Adapt Nodum graph rendering behind `KnowledgeGraphProps`.
-- [x] Integrate Vault and editable Quick Notes in one IMPERIUM knowledge tab.
+- [ ] Adapt Atomic Editor behind `EditorAdapter` after the host TypeScript build boundary.
+- [ ] Benchmark and adapt Nodum/Cosmos or Sigma/Graphology behind `KnowledgeGraphProps`.
+- [x] Integrate vault Markdown and existing IMPERIUM notes in one graph-editor workspace.
 - [ ] Complete the remaining release gates.
 
 ## Non-goals for the first release
